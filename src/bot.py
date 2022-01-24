@@ -1,7 +1,10 @@
 import logging
-from telegram import Update
+from telegram import (
+    Update, InlineQueryResultArticle, InputTextMessageContent
+)
 from telegram.ext import (
-    Updater, Dispatcher, CallbackContext, CommandHandler, Filters
+    Updater, Dispatcher, CallbackContext, CommandHandler, Filters,
+    InlineQueryHandler
 )
 
 from downloader import Downloader 
@@ -16,6 +19,8 @@ class InlineBot:
 
         self._dispatcher.add_handler(CommandHandler('start', self.on_start))
         self._dispatcher.add_handler(CommandHandler('download', self.on_download, run_async=True))
+
+        self._dispatcher.add_handler(InlineQueryHandler(self.on_inline, run_async=True))
 
     @property
     def _dispatcher(self) -> Dispatcher:
@@ -44,4 +49,19 @@ class InlineBot:
         )
 
     def on_inline(self, update: Update, context: CallbackContext):
-        ...
+        from uuid import uuid4
+        query = update.inline_query.query
+
+        if query == "":
+            return
+
+        id = 5
+        results = [
+            InlineQueryResultArticle(
+                id=id,
+                title="Caps",
+                input_message_content=InputTextMessageContent(query.upper())
+            )
+        ]
+
+        update.inline_query.answer(results, cache_time=0)
