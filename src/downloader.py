@@ -34,7 +34,8 @@ class Downloader:
             "paths": {
                 "home": self._temporary_dir.name
             },
-            "match_filter": self._filter_length
+            "match_filter": self._filter_length,
+            "noplaylist": True
         }
 
     def _get_temp_file_name(self) -> str:
@@ -43,7 +44,7 @@ class Downloader:
         return str(path)
 
     def _filter_length(self, info_dict, *args, **kwargs):
-        duration = info_dict["duration"]
+        duration = info_dict.get("duration", 0)
         if duration < config.max_video_length_s:
             return None
         return f"Rejected: Video is to long with {duration}s" 
@@ -52,17 +53,27 @@ class Downloader:
         if info["status"] == "finished":
             print(info["filename"])
 
+    def _get_info_with_download(self, ydl: YoutubeDL, url: str) -> Dict[str, Any]:
+        extra_info = {}
+        if "tumblr" in url:
+            extra_info["http_headers"] = {
+                "Referer": url
+            }
+
+        return ydl.extract_info(url, download=True, extra_info=extra_info)
+
     def download(self, url: str):
         filename = self._get_temp_file_name()
         logging.debug(f"Download: Writing to '{filename}'")
         with YoutubeDL(self._get_opts(filename)) as ydl:
             ydl.add_progress_hook(self._finished_hook)
-            info = ydl.extract_info(url, download=True)
+            info = self._get_info_with_download(ydl, url)
 
             filepath = Path(f"{filename}.{info['ext']}")
             if not filepath.is_file():
                 raise RuntimeError("Downloaded file could not be found")
 
+            breakpoint()
             return VideoInfo(
                 filepath=filepath,
                 title=info["title"],
