@@ -7,6 +7,7 @@ import tempfile
 import logging
 from dataclasses import dataclass
 
+from plugins.tumblr import TumblrIE
 from settings import config
 
 
@@ -66,6 +67,7 @@ class Downloader:
         filename = self._get_temp_file_name()
         logging.debug(f"Download: Writing to '{filename}'")
         with YoutubeDL(self._get_opts(filename)) as ydl:
+            ydl.add_info_extractor(TumblrIE())
             ydl.add_progress_hook(self._finished_hook)
             info = self._get_info_with_download(ydl, url)
 
@@ -73,12 +75,11 @@ class Downloader:
             if not filepath.is_file():
                 raise RuntimeError("Downloaded file could not be found")
 
-            breakpoint()
             return VideoInfo(
                 filepath=filepath,
                 title=info["title"],
                 ext=info["ext"],
-                duration_s=info["duration"]
+                duration_s=info.get("duration", None)
             )
 
     def __del__(self):
