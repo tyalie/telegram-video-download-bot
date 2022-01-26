@@ -4,7 +4,7 @@ from settings import config
 
 def main():
     token = config.token
-    bot = InlineBot(token)
+    bot = InlineBot(token, devnullchat=config.dev_null_chat)
     bot.launch()
 
 
