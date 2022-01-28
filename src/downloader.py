@@ -1,5 +1,6 @@
 from typing import Dict, Any
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import random_user_agent
 from pathlib import Path
 import base64
 import secrets
@@ -8,6 +9,7 @@ import logging
 from dataclasses import dataclass
 
 from plugins.tumblr import TumblrIE
+from plugins.youtube_dl_injection import YoutubeDL2
 from settings import config
 
 
@@ -28,7 +30,7 @@ class Downloader:
         self._temporary_dir = tempfile.TemporaryDirectory()
         logging.debug(f"Using temporary dictionary {self._temporary_dir.name}")
 
-    def _get_opts(self, filename) -> Dict[str, Any]:
+    def _get_opts(self, filename, url) -> Dict[str, Any]:
         return {
             "format": "(mp4,webm)",
             "outtmpl": f"{filename}.%(ext)s",
@@ -36,7 +38,9 @@ class Downloader:
                 "home": self._temporary_dir.name
             },
             "match_filter": self._filter_length,
-            "noplaylist": True
+            "noplaylist": True,
+            "http_headers": self._get_custom_headers_from_url(url),
+            # "debug_printtraffic": True,
         }
 
     def _get_temp_file_name(self) -> str:
@@ -56,17 +60,25 @@ class Downloader:
 
     def _get_info_with_download(self, ydl: YoutubeDL, url: str) -> Dict[str, Any]:
         extra_info = {}
+
         if "tumblr" in url:
-            extra_info["http_headers"] = {
-                "Referer": url
-            }
+            extra_info["http_headers"].update(Referer=url)
 
         return ydl.extract_info(url, download=True, extra_info=extra_info)
+
+    def _get_custom_headers_from_url(self, url: str) -> Dict:
+        headers = {"User-Agent": random_user_agent()}
+
+        if "tiktok" in url:
+            headers.update({"User-Agent": "facebookexternalhit/1.1"})
+
+        return headers
 
     def download(self, url: str):
         filename = self._get_temp_file_name()
         logging.debug(f"Download: Writing to '{filename}'")
-        with YoutubeDL(self._get_opts(filename)) as ydl:
+
+        with YoutubeDL2(self._get_opts(filename, url)) as ydl:
             ydl.add_info_extractor(TumblrIE())
             ydl.add_progress_hook(self._finished_hook)
             info = self._get_info_with_download(ydl, url)
