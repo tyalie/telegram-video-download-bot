@@ -46,12 +46,12 @@ class InlineQueryRespondDispatcher:
         if not next_arrived_event.is_set():
             info = self._downloader.download(query)
         if not next_arrived_event.is_set():
-            result = self._upload_video(info)
+            result = self._upload_video(info, query)
         if not next_arrived_event.is_set():
             self._bot.answerInlineQuery(query_id, [result])
             logging.debug(f"Answered to inline query '{query}'")
 
-    def _upload_video(self, info: VideoInfo):
+    def _upload_video(self, info: VideoInfo, url: str):
         try:
             v_msg = self._bot.send_video(
                 self._devnullchat, open(info.filepath, "rb"), filename=info.orig_filename
@@ -62,7 +62,7 @@ class InlineQueryRespondDispatcher:
             logging.debug(f"Video {info.orig_filename} uploaded successfully")
 
             return InlineQueryResultCachedVideo(
-                0, video_file_id=media_id, title=info.title, caption="Test"
+                0, video_file_id=media_id, title=info.title, caption=url
             )
 
         except TelegramError as err:
