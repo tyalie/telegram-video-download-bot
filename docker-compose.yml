@@ -2,6 +2,7 @@ version: "3.9"
 services:
   telegram_video_bot:
     build: .
+    restart: always
     environment:
       - DEV_NULL_CHAT=-784330791
       - BOT_NAME=Video Bot
