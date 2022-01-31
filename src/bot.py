@@ -73,7 +73,9 @@ class InlineBot:
                 if next_bucket != last_bucket or status_message.chat.type == "private":
                     text = self._resource_man.get_string(
                         "status_download_progress", progress=f"{progress:.1f}")
-                    status_message.edit_text(text, parse_mode="Markdown")
+                    if status_message.text != text:
+                        status_message.edit_text(text, parse_mode="Markdown")
+                    status_message.text = text
                     last_bucket = next_bucket
 
             else:
