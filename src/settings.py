@@ -26,9 +26,9 @@ class Settings(BaseSettings):
         logging.basicConfig(level=self.logging_mode)
         logging.debug(f"Using RESOURCE_PATH: {self.resource_path}")
 
-        if not config.bot_handle.startswith("@"):
+        if not self.bot_handle.startswith("@"):
             logging.warning(
-                f"The bot handle should start with an '@' (currently: '{config.bot_handle}')")
+                f"The bot handle should start with an '@' (currently: '{self.bot_handle}')")
 
     @property
     def token(self) -> str:
