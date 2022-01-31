@@ -52,12 +52,12 @@ class InlineQueryRespondDispatcher:
         )
         self._next_query_arrived_events[inline_query.from_user.id].process = responder
         responder.start()
-        Thread(target=self.joinProcess, args=[responder, inline_query]).start()
+        Thread(target=self.joinProcess, args=[responder, inline_query.query]).start()
 
     def joinProcess(self, process, query):
-        print(f"Starting '{query}' {process}")
+        logging.debug(f"Starting process - '{query}' {process}")
         process.join()
-        print(f"End '{query}' {process}")
+        logging.debug(f"Ending process - {process}")
 
     def _respondToInlineQuery(self, inline_query: InlineQuery, next_arrived_event: Event):
         query = inline_query.query
