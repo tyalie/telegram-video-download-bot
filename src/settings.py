@@ -6,6 +6,7 @@ import logging
 class Settings(BaseSettings):
     token_path: Path = "./token"
     debug: bool = "False"
+    debug_yt_traffic: bool = "False"
 
     max_video_length_s: int = 240
     resource_path: Path = Path(__file__).parent / "../resources"

@@ -40,7 +40,7 @@ class Downloader:
             "match_filter": self._filter_length,
             "noplaylist": True,
             "http_headers": self._get_custom_headers_from_url(url),
-            # "debug_printtraffic": True,
+            "debug_printtraffic": config.debug_yt_traffic,
         }
 
     def _get_temp_file_name(self) -> str:
@@ -70,6 +70,7 @@ class Downloader:
         headers = {"User-Agent": random_user_agent()}
 
         if "tiktok" in url:
+            # see https://github.com/yt-dlp/yt-dlp/issues/2396
             headers.update({"User-Agent": "facebookexternalhit/1.1"})
 
         return headers
