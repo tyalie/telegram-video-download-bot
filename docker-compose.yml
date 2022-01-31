@@ -4,9 +4,9 @@ services:
     build: .
     restart: always
     environment:
-      - DEV_NULL_CHAT=-784330791
+      - DEV_NULL_CHAT=YOUR_DEV_NULL_CHAT
       - BOT_NAME=Video Bot
-      - BOT_HANDLE=@InFrogBot
+      - BOT_HANDLE=@YOUR_BOT_HANDLE
       - TOKEN_PATH=/token
     volumes:
       - ./token:/token
