@@ -5,8 +5,8 @@ from settings import config
 
 
 def terminate(bot: InlineBot):
-    def handler():
-        print("TERMINATE")
+    def handler(signum, frame):
+        print(f"TERMINATE with {signum}")
         bot.stop()
     return handler
 
