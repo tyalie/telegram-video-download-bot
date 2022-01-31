@@ -1,4 +1,4 @@
 python-telegram-bot
 yt-dlp
-pydantic
+pydantic[dotenv]
 beautifulsoup4>=4.9.3
