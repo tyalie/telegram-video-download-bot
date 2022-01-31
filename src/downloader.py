@@ -79,13 +79,13 @@ class Downloader:
 
     def _filter_length(self, info_dict, *args, **kwargs):
         duration = info_dict.get("duration", 0)
-        if duration < config.max_video_length_s:
+        if duration is None or duration < config.max_video_length_s:
             return None
         return f"Rejected: Video is to long with {duration}s" 
 
     def _finished_hook(self, info):
         if info["status"] == "finished":
-            print(info["filename"])
+            logging.debug(f"Downloaded file: {info['filename']}")
 
     def _get_info_with_download(self, ydl: YoutubeDL, url: str) -> Dict[str, Any]:
         extra_info = {}
