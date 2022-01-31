@@ -59,9 +59,10 @@ class InlineBot:
     def _build_progress_handler(self, status_message: Message) -> Callable[[Dict], None]:
         last_bucket = None
         buckets = list(map(lambda v: 100 / 3 * v, range(0, 3 + 1)))
+        counter = 0
 
         def handler(data: Dict):
-            nonlocal last_bucket
+            nonlocal last_bucket, counter
 
             if data["status"] == "finished":
                 status_message.edit_text(self._resource_man.get_string("status_download_finished"))
@@ -70,13 +71,14 @@ class InlineBot:
                
                 # I can't update message to often if it is in group
                 next_bucket = next(filter(lambda v: v <= progress, reversed(buckets)))
-                if next_bucket != last_bucket or status_message.chat.type == "private":
+                if (next_bucket != last_bucket and counter < 4) or status_message.chat.type == "private":
                     text = self._resource_man.get_string(
                         "status_download_progress", progress=f"{progress:.1f}")
                     if status_message.text != text:
                         status_message.edit_text(text, parse_mode="Markdown")
                     status_message.text = text
                     last_bucket = next_bucket
+                    counter += 1
 
             else:
                 status_message.edit_text(f"Unknown status - {data['status']}")
