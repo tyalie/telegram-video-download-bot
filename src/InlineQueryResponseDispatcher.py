@@ -1,12 +1,22 @@
 from threading import Event, Thread
-from telegram import Bot, InlineQuery, InlineQueryResultCachedVideo, TelegramError
+from multiprocessing import Process
+from telegram import Bot, InlineQuery, InlineQueryResultCachedVideo, TelegramError, InlineQueryResultArticle, InputTextMessageContent
 import logging
+from typing import Optional
+from yt_dlp.utils import YoutubeDLError
+from dataclasses import dataclass
 
 from resourcemanager import ResourceManager
 from downloader import Downloader
 
 from util import validate_query
 from downloader import VideoInfo
+
+
+@dataclass
+class Query:
+    event: Event
+    process: Optional[Process]
 
 
 class InlineQueryRespondDispatcher:
@@ -25,16 +35,29 @@ class InlineQueryRespondDispatcher:
         logging.debug(f"Received inline query {inline_query}")
 
         try:
-            self._next_query_arrived_events[inline_query.from_user.id].set()
+            query = self._next_query_arrived_events[inline_query.from_user.id]
+            query.event.set()
+            # needing to terminate process as there is no trivial 
+            # way to stop YoutubeDL during the download
+            if query.process is not None:
+                query.process.terminate()
         except KeyError:
             ...
         finally:
-            self._next_query_arrived_events[inline_query.from_user.id] = Event()
+            self._next_query_arrived_events[inline_query.from_user.id] = Query(Event(), None)
 
-        Thread(
+        responder = Process(
             target=self._respondToInlineQuery,
-            args=[inline_query, self._next_query_arrived_events[inline_query.from_user.id]]
-        ).start()
+            args=[inline_query, self._next_query_arrived_events[inline_query.from_user.id].event]
+        )
+        self._next_query_arrived_events[inline_query.from_user.id].process = responder
+        responder.start()
+        Thread(target=self.joinProcess, args=[responder, inline_query]).start()
+
+    def joinProcess(self, process, query):
+        print(f"Starting '{query}' {process}")
+        process.join()
+        print(f"End '{query}' {process}")
 
     def _respondToInlineQuery(self, inline_query: InlineQuery, next_arrived_event: Event):
         query = inline_query.query
@@ -43,13 +66,16 @@ class InlineQueryRespondDispatcher:
         if not validate_query(query):
             return
 
-        if not next_arrived_event.is_set():
-            info = self._downloader.download(query)
-        if not next_arrived_event.is_set():
-            result = self._upload_video(info, query)
-        if not next_arrived_event.is_set():
-            self._bot.answerInlineQuery(query_id, [result])
-            logging.debug(f"Answered to inline query '{query}'")
+        try:
+            if not next_arrived_event.is_set():
+                info = self._downloader.download(query)
+            if not next_arrived_event.is_set():
+                result = self._upload_video(info, query)
+            if not next_arrived_event.is_set():
+                self._bot.answerInlineQuery(query_id, [result])
+                logging.debug(f"Answered to inline query '{query}'")
+        except YoutubeDLError as err:
+            self._bot.answerInlineQuery(query_id, [InlineQueryResultArticle(0, "Error downloading", InputTextMessageContent(err.msg))])
 
     def _upload_video(self, info: VideoInfo, url: str):
         try:
@@ -67,7 +93,6 @@ class InlineQueryRespondDispatcher:
 
         except TelegramError as err:
             logging.warn(f"Telegram Error occured: {err}")
-
 
 
         
