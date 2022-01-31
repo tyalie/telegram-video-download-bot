@@ -1,10 +1,8 @@
 import logging
-from telegram import (
-    Update, InlineQueryResultArticle, InputTextMessageContent
-)
+from telegram import Update
 from telegram.ext import (
-    Updater, Dispatcher, CallbackContext, CommandHandler,
-    InlineQueryHandler, DispatcherHandlerStop
+    Updater, Dispatcher, CallbackContext, CommandHandler, 
+    Filters, InlineQueryHandler
 )
 
 from downloader import Downloader 
@@ -22,9 +20,14 @@ class InlineBot:
             self._updater.bot, self._resource_man, self._downloader, devnullchat
         )
 
-        self._dispatcher.add_handler(CommandHandler('start', self.on_start))
-        self._dispatcher.add_handler(CommandHandler('download', self.on_download, run_async=True))
-        self._dispatcher.add_handler(CommandHandler('get_chat_id', self.get_chat_id))
+        _start = CommandHandler('start', self.on_start, filters=Filters.chat_type.private)
+        self._dispatcher.add_handler(_start)
+
+        _download = CommandHandler('download', self.on_download, run_async=True)
+        self._dispatcher.add_handler(_download)
+
+        _chat_id = CommandHandler('get_chat_id', self.get_chat_id, filters=Filters.chat_type.private)
+        self._dispatcher.add_handler(_chat_id)
 
         self._dispatcher.add_handler(InlineQueryHandler(self.on_inline, run_async=True))
 
