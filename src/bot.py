@@ -64,5 +64,3 @@ class InlineBot:
             return
 
         self._inline_query_response_dispatcher.dispatchInlineQueryResponse(update.inline_query)
-
-        raise DispatcherHandlerStop
