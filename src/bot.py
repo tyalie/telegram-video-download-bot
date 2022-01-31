@@ -1,13 +1,17 @@
 import logging
-from telegram import Update
+from typing import Callable, Dict
+from telegram import Update, TelegramError, Message
+from telegram.utils.helpers import escape_markdown
 from telegram.ext import (
     Updater, Dispatcher, CallbackContext, CommandHandler, 
     Filters, InlineQueryHandler
 )
 
+from yt_dlp.utils import YoutubeDLError
 from downloader import Downloader 
 from resourcemanager import ResourceManager
 from InlineQueryResponseDispatcher import InlineQueryRespondDispatcher
+from util import clean_yt_error
 
 
 class InlineBot:
@@ -47,18 +51,59 @@ class InlineBot:
     def get_chat_id(self, update: Update, context: CallbackContext):
         update.message.reply_text(f"{update.message.chat_id}")
 
+    def _build_progress_handler(self, status_message: Message) -> Callable[[Dict], None]:
+        def handler(data: Dict):
+            if data["status"] == "finished":
+                status_message.edit_text(self._resource_man.get_string("status_download_finished"))
+            elif data["status"] == "downloading":
+                progress = data["downloaded_bytes"] / data["total_bytes"] * 100
+                text = self._resource_man.get_string(
+                    "status_download_progress", progress=f"{progress:.1f}")
+                status_message.edit_text(text, parse_mode="Markdown")
+            else:
+                status_message.edit_text(f"Unknown status - {data['status']}")
+
+        return handler
+
     def on_download(self, update: Update, context: CallbackContext):
         if len(context.args) != 1:
             update.message.reply_text(self._resource_man.get_string("download_error_arg_one"))
             return
 
-        info = self._downloader.download(context.args[0])
-        logging.debug(f"Bot: Uploading file '{info.orig_filename}'")
-        update.message.reply_video(
-            open(info.filepath, "rb"),
-            supports_streaming=True, reply_to_message_id=update.message.message_id,
-            filename=info.orig_filename, duration=info.duration_s
-        )
+        status_message = None
+        try:
+            status_message = update.message.reply_text(
+                self._resource_man.get_string("status_download_progress", progress="0"), 
+                parse_mode="Markdown", reply_to_message_id=update.message.message_id
+            )
+
+            info = self._downloader.download(
+                context.args[0], self._build_progress_handler(status_message)
+            )
+
+            logging.debug(f"Bot: Uploading file '{info.orig_filename}'")
+            update.message.reply_video(
+                open(info.filepath, "rb"),
+                supports_streaming=True, reply_to_message_id=update.message.message_id,
+                filename=info.orig_filename, duration=info.duration_s
+            )
+        except TelegramError as err:
+            logging.warn("Telegram error", exc_info=err)
+            update.message.reply_markdown(
+                self._resource_man.get_string("error_telegram", error=err.message),
+                reply_to_message_id=update.message.message_id
+            )
+        except YoutubeDLError as err:
+            logging.info(f"Download error ({context.args[0]})")
+            error_text = escape_markdown(clean_yt_error(err), version=2, entity_type="CODE")
+            update.message.reply_markdown_v2(
+                self._resource_man.get_string("error_download", error=error_text),
+                reply_to_message_id=update.message.message_id,
+                disable_web_page_preview=True
+            )
+        finally:
+            if status_message is not None:
+                status_message.delete()
 
     def on_inline(self, update: Update, context: CallbackContext):
         query = update.inline_query.query

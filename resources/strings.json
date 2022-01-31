@@ -2,5 +2,9 @@
   "greeting": "Hello there, I'm Frogbot 2.0. You can use either the /download keyword or just use me inline with @InFrogbot.",
   "download_error_arg_one": "You should pass exactly one argument to the bot: The URL of the video file",
   "error_inline_download_title": "Error downloading media",
-  "error_inline_telegram_title": "Unknown Telegram error"
+  "error_inline_telegram_title": "Unknown Telegram error",
+  "status_download_progress": "*Download started* - ${progress}%",
+  "status_download_finished": "Download finished",
+  "error_telegram": "Telegram error occured\n${error}",
+  "error_download": "*Error downloading media*\n```\n${error}\n```"
 }
