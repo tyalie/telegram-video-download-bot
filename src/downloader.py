@@ -1,6 +1,6 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Callable
 from yt_dlp import YoutubeDL
-from yt_dlp.utils import random_user_agent, YoutubeDLError
+from yt_dlp.utils import random_user_agent
 from pathlib import Path
 import base64
 import secrets
@@ -25,11 +25,30 @@ class VideoInfo:
         return f"{self.title}.{self.ext}"
 
 
+class MyLogger:
+    def debug(self, msg):
+        if msg.startswith('[debug] '):
+            ...
+        else:
+            self.info(msg)
+
+    def info(self, msg):
+        ...
+
+    def warning(self, msg):
+        ...
+
+    def error(self, msg):
+        logging.error(self._remove_prefix(msg))
+
+    def _remove_prefix(self, msg: str) -> str:
+        return msg[msg.find(']') + 1:]
+
+
 class Downloader:
     def __init__(self):
         self._temporary_dir = tempfile.TemporaryDirectory()
         logging.debug(f"Using temporary dictionary {self._temporary_dir.name}")
-        self.counter = 0
 
     def _get_opts(self, filename, url) -> Dict[str, Any]:
         return {
@@ -40,11 +59,13 @@ class Downloader:
             },
             "match_filter": self._filter_length,
             "noplaylist": True,
+            "logger": MyLogger(),
             "http_headers": self._get_custom_headers_from_url(url),
 
             "socket_timeout": config.yt_socket_timeout,
             "debug_printtraffic": config.debug_yt_traffic,
-            "no_color": True
+            "quiet": config.yt_quiet_mode,
+            "no_color": True,
         }
 
     def _get_temp_file_name(self) -> str:
@@ -75,19 +96,14 @@ class Downloader:
 
         return headers
 
-    def hook(self, data):
-        data = YoutubeDL.sanitize_info(data)
-        import json
-        with open(f"/tmp/logs/yt.{self.counter}.json", "w") as f:
-            json.dump(data, f)
-            self.counter += 1
-
-    def download(self, url: str):
+    def download(self, url: str, progress_handler: Optional[Callable[[Dict], None]] = None):
         filename = self._get_temp_file_name()
         logging.debug(f"Download: Writing to '{filename}'")
 
         with YoutubeDL2(self._get_opts(filename, url)) as ydl:
-            ydl.add_progress_hook(self.hook)
+            if progress_handler is not None:
+                ydl.add_progress_hook(progress_handler)
+
             ydl.add_info_extractor(TumblrIE())
             ydl.add_progress_hook(self._finished_hook)
             info = self._get_info_with_download(ydl, url)

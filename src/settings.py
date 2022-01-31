@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     debug_yt_traffic: bool = "False"
     yt_socket_timeout: float = "2"
+    yt_quiet_mode: bool = "True"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
