@@ -6,7 +6,7 @@ from telegram import (
 )
 import logging
 from typing import Optional
-from yt_dlp.utils import YoutubeDLError, DownloadCancelled
+from yt_dlp.utils import YoutubeDLError
 from dataclasses import dataclass
 
 from resourcemanager import ResourceManager
@@ -14,6 +14,12 @@ from downloader import Downloader
 
 from util import validate_query, clean_yt_error
 from downloader import VideoInfo
+
+
+@dataclass
+class Query:
+    event: Event
+    process: Optional[Process]
 
 
 class InlineQueryRespondDispatcher:
@@ -32,16 +38,22 @@ class InlineQueryRespondDispatcher:
         logging.debug(f"Received inline query {inline_query}")
 
         try:
-            self._next_query_arrived_events[inline_query.from_user.id].is_set()
+            query = self._next_query_arrived_events[inline_query.from_user.id]
+            query.event.set()
+            # needing to terminate process as there is no trivial 
+            # way to stop YoutubeDL during the download
+            if query.process is not None:
+                query.process.terminate()
         except KeyError:
             ...
         finally:
-            self._next_query_arrived_events[inline_query.from_user.id] = Event()
+            self._next_query_arrived_events[inline_query.from_user.id] = Query(Event(), None)
 
         responder = Process(
             target=self._respondToInlineQuery,
-            args=[inline_query, self._next_query_arrived_events[inline_query.from_user.id]]
+            args=[inline_query, self._next_query_arrived_events[inline_query.from_user.id].event]
         )
+        self._next_query_arrived_events[inline_query.from_user.id].process = responder
         responder.start()
         Thread(target=self.joinProcess, args=[responder, inline_query.query]).start()
 
@@ -49,12 +61,6 @@ class InlineQueryRespondDispatcher:
         logging.debug(f"Starting process - '{query}' {process}")
         process.join()
         logging.debug(f"Ending process - {process}")
-
-    def _build_progress_handler(self, next_arrived_event: Event):
-        def handler(data):
-            if next_arrived_event.is_set():
-                raise DownloadCancelled()
-        return handler
 
     def _respondToInlineQuery(self, inline_query: InlineQuery, next_arrived_event: Event):
         query = inline_query.query
@@ -65,21 +71,17 @@ class InlineQueryRespondDispatcher:
 
         info = None
         video_cache = None
-        result = None
 
         try:
             if not next_arrived_event.is_set():
-                info = self._downloader.download(query, self._build_progress_handler(next_arrived_event))
-
+                info = self._downloader.download(query)
             if not next_arrived_event.is_set():
                 video_cache = self._upload_video(info)
 
-            if not next_arrived_event.is_set() and video_cache is not None:
-                media_id = video_cache.video.file_id
-                result = InlineQueryResultCachedVideo(
-                    0, video_file_id=media_id, title=info.title, caption=query
-                )
-                logging.info("Served inline video request")
+            media_id = video_cache.video.file_id
+            result = InlineQueryResultCachedVideo(
+                0, video_file_id=media_id, title=info.title, caption=query
+            )
         except TelegramError as err:
             logging.warn("Error handling inline query", exc_info=err)
             result = InlineQueryResultArticle(
@@ -93,14 +95,13 @@ class InlineQueryRespondDispatcher:
                 description=clean_yt_error(err)
             )
         finally:
+            if not next_arrived_event.is_set():
+                self._bot.answerInlineQuery(query_id, [result], cache_time=0)
+                logging.debug(f"Answered to inline query '{query}'")
             if info is not None:
                 self._downloader.release_video(info.uuid)
             if video_cache is not None:
                 video_cache.delete()
-
-            if not next_arrived_event.is_set() and result is not None:
-                self._bot.answerInlineQuery(query_id, [result], cache_time=0)
-                logging.debug(f"Answered to inline query '{query}'")
 
     def _upload_video(self, info: VideoInfo) -> Message:
         try:
