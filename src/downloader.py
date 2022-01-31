@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional, Callable
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import random_user_agent
+from yt_dlp.postprocessor import FFmpegVideoRemuxerPP
 from time import time
 from pathlib import Path
 import tempfile
@@ -56,7 +57,7 @@ class Downloader:
 
     def _get_opts(self, filename, url) -> Dict[str, Any]:
         return {
-            "format": "(mp4,webm)",
+            "format_sort": ["+vcodec:avc", "+acodec:m4a"],
             "outtmpl": f"{filename}.%(ext)s",
             "paths": {
                 "home": self._temporary_dir.name
@@ -108,13 +109,17 @@ class Downloader:
             if progress_handler is not None:
                 ydl.add_progress_hook(progress_handler)
 
+            # add additional extractor plugins
             ydl.add_info_extractor(TumblrIE())
+
+            ydl.add_post_processor(FFmpegVideoRemuxerPP(ydl, "mp4"))
             ydl.add_progress_hook(self._finished_hook)
             info = self._get_info_with_download(ydl, url)
+            info['ext'] = "mp4"
 
             filepath = Path(f"{filename}.{info['ext']}")
             if not filepath.is_file():
-                raise RuntimeError("Downloaded file could not be found")
+                raise RuntimeError(f"Downloaded file could not be found ({filepath})")
 
             vinfo = VideoInfo(
                 filepath=filepath,
