@@ -1,0 +1,6 @@
+venv
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+token
+**/__pycache__
