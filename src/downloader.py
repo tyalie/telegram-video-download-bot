@@ -41,8 +41,10 @@ class Downloader:
             "match_filter": self._filter_length,
             "noplaylist": True,
             "http_headers": self._get_custom_headers_from_url(url),
+
             "socket_timeout": config.yt_socket_timeout,
             "debug_printtraffic": config.debug_yt_traffic,
+            "no_color": True
         }
 
     def _get_temp_file_name(self) -> str:

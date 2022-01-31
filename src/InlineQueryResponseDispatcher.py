@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from resourcemanager import ResourceManager
 from downloader import Downloader
 
-from util import validate_query
+from util import validate_query, clean_yt_error
 from downloader import VideoInfo
 
 
@@ -71,11 +71,22 @@ class InlineQueryRespondDispatcher:
                 info = self._downloader.download(query)
             if not next_arrived_event.is_set():
                 result = self._upload_video(info, query)
-            if not next_arrived_event.is_set():
-                self._bot.answerInlineQuery(query_id, [result])
-                logging.debug(f"Answered to inline query '{query}'")
+        except TelegramError as err:
+            logging.warn("Error handling inline query", exc_info=err)
+            result = InlineQueryResultArticle(
+                0, self._resource_man.get_string("error_inline_telegram_title"),
+                InputTextMessageContent(err.message), description=str(err)
+            )
         except YoutubeDLError as err:
-            self._bot.answerInlineQuery(query_id, [InlineQueryResultArticle(0, "Error downloading", InputTextMessageContent(err.msg))])
+            result = InlineQueryResultArticle(
+                0, self._resource_man.get_string("error_inline_download_title"),
+                InputTextMessageContent(f"Error downloading: {inline_query.query}"),
+                description=clean_yt_error(err)
+            )
+        finally:
+            if not next_arrived_event.is_set():
+                self._bot.answerInlineQuery(query_id, [result], cache_time=0)
+                logging.debug(f"Answered to inline query '{query}'")
 
     def _upload_video(self, info: VideoInfo, url: str):
         try:
@@ -93,8 +104,4 @@ class InlineQueryRespondDispatcher:
 
         except TelegramError as err:
             logging.warn(f"Telegram Error occured: {err}")
-
-
-        
-
 
