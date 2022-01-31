@@ -140,7 +140,6 @@ class Downloader:
             info['ext'] = "mp4"
 
             filepath = Path(f"{filename}.{info['ext']}")
-            breakpoint()
             if not filepath.is_file():
                 raise RuntimeError(f"Downloaded file could not be found ({filepath})")
 
