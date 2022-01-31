@@ -6,13 +6,15 @@ import logging
 class Settings(BaseSettings):
     token_path: Path = "./token"
     debug: bool = "False"
-    debug_yt_traffic: bool = "False"
 
     max_video_length_s: int = 240
     resource_path: Path = Path(__file__).parent / "../resources"
 
     logging_mode: str = "INFO"
     dev_null_chat: int = -1
+
+    debug_yt_traffic: bool = "False"
+    yt_socket_timeout: float = "2"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

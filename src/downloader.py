@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from yt_dlp import YoutubeDL
-from yt_dlp.utils import random_user_agent
+from yt_dlp.utils import random_user_agent, YoutubeDLError
 from pathlib import Path
 import base64
 import secrets
@@ -29,6 +29,7 @@ class Downloader:
     def __init__(self):
         self._temporary_dir = tempfile.TemporaryDirectory()
         logging.debug(f"Using temporary dictionary {self._temporary_dir.name}")
+        self.counter = 0
 
     def _get_opts(self, filename, url) -> Dict[str, Any]:
         return {
@@ -40,6 +41,7 @@ class Downloader:
             "match_filter": self._filter_length,
             "noplaylist": True,
             "http_headers": self._get_custom_headers_from_url(url),
+            "socket_timeout": config.yt_socket_timeout,
             "debug_printtraffic": config.debug_yt_traffic,
         }
 
@@ -60,10 +62,6 @@ class Downloader:
 
     def _get_info_with_download(self, ydl: YoutubeDL, url: str) -> Dict[str, Any]:
         extra_info = {}
-
-        if "tumblr" in url:
-            extra_info["http_headers"].update(Referer=url)
-
         return ydl.extract_info(url, download=True, extra_info=extra_info)
 
     def _get_custom_headers_from_url(self, url: str) -> Dict:
@@ -75,11 +73,19 @@ class Downloader:
 
         return headers
 
+    def hook(self, data):
+        data = YoutubeDL.sanitize_info(data)
+        import json
+        with open(f"/tmp/logs/yt.{self.counter}.json", "w") as f:
+            json.dump(data, f)
+            self.counter += 1
+
     def download(self, url: str):
         filename = self._get_temp_file_name()
         logging.debug(f"Download: Writing to '{filename}'")
 
         with YoutubeDL2(self._get_opts(filename, url)) as ydl:
+            ydl.add_progress_hook(self.hook)
             ydl.add_info_extractor(TumblrIE())
             ydl.add_progress_hook(self._finished_hook)
             info = self._get_info_with_download(ydl, url)
