@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, Callable
 from yt_dlp import YoutubeDL
-from yt_dlp.utils import random_user_agent
+from yt_dlp.utils import random_user_agent, DownloadError, UnsupportedError
 from yt_dlp.postprocessor import FFmpegVideoRemuxerPP
 from time import time
 from pathlib import Path
@@ -57,15 +57,17 @@ class Downloader:
 
     def _get_opts(self, filename, url) -> Dict[str, Any]:
         return {
-            "format_sort": ["+vcodec:avc", "+acodec:m4a"],
+            # prefer h264, … over vp9 and have video be 480p or smallest 
+            "format_sort": ["+vcodec:avc", "+acodec:m4a", "res:480"],
             "outtmpl": f"{filename}.%(ext)s",
             "paths": {
                 "home": self._temporary_dir.name
             },
-            "match_filter": self._filter_length,
+            "match_filter": self._video_filter,
             "noplaylist": True,
             "logger": MyLogger(),
             "http_headers": self._get_custom_headers_from_url(url),
+            "break_on_reject": True,
 
             "socket_timeout": config.yt_socket_timeout,
             "debug_printtraffic": config.debug_yt_traffic,
@@ -78,11 +80,31 @@ class Downloader:
         path = Path(self._temporary_dir.name) / uuid 
         return str(path)
 
+    def _video_filter(self, info_dict, *args, **kwargs):
+        results = list(
+            filter(lambda v: v is not None, 
+                   map(lambda f: f(info_dict), [
+                       self._filter_is_live,
+                       self._filter_length
+                   ])
+        ))
+
+        if len(results) > 0:
+            raise DownloadError(results[0], UnsupportedError(info_dict.get("original_url", "")))
+        return None
+
     def _filter_length(self, info_dict, *args, **kwargs):
+        """Filters videos by their length in s to remove very large ones"""
         duration = info_dict.get("duration", 0)
         if duration is None or duration < config.max_video_length_s:
             return None
-        return f"Rejected: Video is to long with {duration}s" 
+        return f"Rejected: Video is to long with {duration}s"
+
+    def _filter_is_live(self, info_dict, *args, **kwargs):
+        """Filters video whether it's a live stream or not"""
+        if not info_dict.get("is_live", False):
+            return None
+        return "Rejected: Video is a live feed"
 
     def _finished_hook(self, info):
         if info["status"] == "finished":
@@ -118,6 +140,7 @@ class Downloader:
             info['ext'] = "mp4"
 
             filepath = Path(f"{filename}.{info['ext']}")
+            breakpoint()
             if not filepath.is_file():
                 raise RuntimeError(f"Downloaded file could not be found ({filepath})")
 
