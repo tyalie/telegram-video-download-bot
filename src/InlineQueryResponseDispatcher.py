@@ -1,6 +1,9 @@
 from threading import Event, Thread
 from multiprocessing import Process
-from telegram import Bot, InlineQuery, InlineQueryResultCachedVideo, TelegramError, InlineQueryResultArticle, InputTextMessageContent
+from telegram import (
+    Bot, InlineQuery, InlineQueryResultCachedVideo, TelegramError, 
+    InlineQueryResultArticle, InputTextMessageContent, Message
+)
 import logging
 from typing import Optional
 from yt_dlp.utils import YoutubeDLError
@@ -67,12 +70,18 @@ class InlineQueryRespondDispatcher:
             return
 
         info = None
+        video_cache = None
 
         try:
             if not next_arrived_event.is_set():
                 info = self._downloader.download(query)
             if not next_arrived_event.is_set():
-                result = self._upload_video(info, query)
+                video_cache = self._upload_video(info)
+
+            media_id = video_cache.video.file_id
+            result = InlineQueryResultCachedVideo(
+                0, video_file_id=media_id, title=info.title, caption=query
+            )
         except TelegramError as err:
             logging.warn("Error handling inline query", exc_info=err)
             result = InlineQueryResultArticle(
@@ -91,21 +100,17 @@ class InlineQueryRespondDispatcher:
                 logging.debug(f"Answered to inline query '{query}'")
             if info is not None:
                 self._downloader.release_video(info.uuid)
+            if video_cache is not None:
+                video_cache.delete()
 
-    def _upload_video(self, info: VideoInfo, url: str):
+    def _upload_video(self, info: VideoInfo) -> Message:
         try:
             v_msg = self._bot.send_video(
-                self._devnullchat, open(info.filepath, "rb"), filename=info.orig_filename
+                self._devnullchat, open(info.filepath, "rb"), 
+                filename=info.orig_filename
             )
-
-            media_id = v_msg.video.file_id
-
             logging.debug(f"Video {info.orig_filename} uploaded successfully")
-
-            return InlineQueryResultCachedVideo(
-                0, video_file_id=media_id, title=info.title, caption=url
-            )
-
+            return v_msg
         except TelegramError as err:
             logging.warn(f"Telegram Error occured: {err}")
 
