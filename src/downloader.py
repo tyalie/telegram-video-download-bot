@@ -1,16 +1,16 @@
 from typing import Dict, Any, Optional, Callable
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import random_user_agent
+from time import time
 from pathlib import Path
-import base64
-import secrets
 import tempfile
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from plugins.tumblr import TumblrIE
 from plugins.youtube_dl_injection import YoutubeDL2
 from settings import config
+from util import generate_token
 
 
 @dataclass
@@ -19,6 +19,8 @@ class VideoInfo:
     title: str
     ext: str
     duration_s: int
+    uuid: str = field(init=False, default_factory=generate_token)
+    _creation: float = field(init=False, default_factory=time)
 
     @property
     def orig_filename(self) -> str:
@@ -48,6 +50,8 @@ class MyLogger:
 class Downloader:
     def __init__(self):
         self._temporary_dir = tempfile.TemporaryDirectory()
+        self._downloaded_video_cache: Dict[str, VideoInfo] = {}
+
         logging.debug(f"Using temporary dictionary {self._temporary_dir.name}")
 
     def _get_opts(self, filename, url) -> Dict[str, Any]:
@@ -69,7 +73,7 @@ class Downloader:
         }
 
     def _get_temp_file_name(self) -> str:
-        uuid = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ASCII")
+        uuid = generate_token(32)
         path = Path(self._temporary_dir.name) / uuid 
         return str(path)
 
@@ -112,12 +116,27 @@ class Downloader:
             if not filepath.is_file():
                 raise RuntimeError("Downloaded file could not be found")
 
-            return VideoInfo(
+            vinfo = VideoInfo(
                 filepath=filepath,
                 title=info["title"],
                 ext=info["ext"],
                 duration_s=info.get("duration", None)
             )
+
+            self._downloaded_video_cache[vinfo.uuid] = vinfo
+            return vinfo
+
+    def release_video(self, uuid: str):
+        if (vinfo := self._downloaded_video_cache.get(uuid)) is None:
+            return
+
+        logging.debug(f"Download: Releasing {vinfo.filepath} | {vinfo.uuid}")
+        if vinfo.filepath.is_file():
+            vinfo.filepath.unlink()
+        else:
+            logging.warning(f"Download: File {vinfo.filepath} | {vinfo.uuid} doesn't exist")
+
+        del self._downloaded_video_cache[uuid]
 
     def __del__(self):
         logging.debug("Download: Cleaning up temporary dictionary")

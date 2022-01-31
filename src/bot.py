@@ -82,6 +82,8 @@ class InlineBot:
             return
 
         status_message = None
+        info = None
+
         try:
             status_message = update.message.reply_text(
                 self._resource_man.get_string("status_download_progress", progress="0"), 
@@ -115,6 +117,8 @@ class InlineBot:
         finally:
             if status_message is not None:
                 status_message.delete()
+            if info is not None:
+                self._downloader.release_video(info.uuid)
 
     def on_inline(self, update: Update, context: CallbackContext):
         query = update.inline_query.query

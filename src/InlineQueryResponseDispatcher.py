@@ -66,6 +66,8 @@ class InlineQueryRespondDispatcher:
         if not validate_query(query):
             return
 
+        info = None
+
         try:
             if not next_arrived_event.is_set():
                 info = self._downloader.download(query)
@@ -87,6 +89,8 @@ class InlineQueryRespondDispatcher:
             if not next_arrived_event.is_set():
                 self._bot.answerInlineQuery(query_id, [result], cache_time=0)
                 logging.debug(f"Answered to inline query '{query}'")
+            if info is not None:
+                self._downloader.release_video(info.uuid)
 
     def _upload_video(self, info: VideoInfo, url: str):
         try:
