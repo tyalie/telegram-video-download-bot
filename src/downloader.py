@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional, Callable
+from multiprocessing import RLock
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import random_user_agent, DownloadError, UnsupportedError
 from yt_dlp.postprocessor import FFmpegVideoRemuxerPP
@@ -52,6 +53,7 @@ class Downloader:
     def __init__(self):
         self._temporary_dir = tempfile.TemporaryDirectory()
         self._downloaded_video_cache: Dict[str, VideoInfo] = {}
+        self._video_cache_lock = RLock()
 
         logging.debug(f"Using temporary dictionary {self._temporary_dir.name}")
 
@@ -150,20 +152,22 @@ class Downloader:
                 duration_s=info.get("duration", None)
             )
 
-            self._downloaded_video_cache[vinfo.uuid] = vinfo
+            with self._video_cache_lock:
+                self._downloaded_video_cache[vinfo.uuid] = vinfo
             return vinfo
 
     def release_video(self, uuid: str):
-        if (vinfo := self._downloaded_video_cache.get(uuid)) is None:
-            return
+        with self._video_cache_lock:
+            if (vinfo := self._downloaded_video_cache.get(uuid)) is None:
+                return
 
-        logging.debug(f"Download: Releasing {vinfo.filepath} | {vinfo.uuid}")
-        if vinfo.filepath.is_file():
-            vinfo.filepath.unlink()
-        else:
-            logging.warning(f"Download: File {vinfo.filepath} | {vinfo.uuid} doesn't exist")
+            logging.debug(f"Download: Releasing {vinfo.filepath} | {vinfo.uuid}")
+            if vinfo.filepath.is_file():
+                vinfo.filepath.unlink()
+            else:
+                logging.warning(f"Download: File {vinfo.filepath} | {vinfo.uuid} doesn't exist")
 
-        del self._downloaded_video_cache[uuid]
+            del self._downloaded_video_cache[uuid]
 
     def __del__(self):
         logging.debug("Download: Cleaning up temporary dictionary")
