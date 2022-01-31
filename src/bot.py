@@ -30,7 +30,7 @@ class InlineBot:
         _download = CommandHandler('download', self.on_download, run_async=True)
         self._dispatcher.add_handler(_download)
 
-        _chat_id = CommandHandler('get_chat_id', self.get_chat_id, filters=Filters.chat_type.private)
+        _chat_id = CommandHandler('get_chat_id', self.get_chat_id)
         self._dispatcher.add_handler(_chat_id)
 
         self._dispatcher.bot.set_my_commands(
