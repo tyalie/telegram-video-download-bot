@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     token_path: Path = "./token"
     debug: bool = "False"
 
+    bot_name: str = "Video Bot"
+    bot_handle: str = "@something"
+
     max_video_length_s: int = 240
     resource_path: Path = Path(__file__).parent / "../resources"
 
@@ -22,6 +25,10 @@ class Settings(BaseSettings):
 
         logging.basicConfig(level=self.logging_mode)
         logging.debug(f"Using RESOURCE_PATH: {self.resource_path}")
+
+        if not config.bot_handle.startswith("@"):
+            logging.warning(
+                f"The bot handle should start with an '@' (currently: '{config.bot_handle}')")
 
     @property
     def token(self) -> str:

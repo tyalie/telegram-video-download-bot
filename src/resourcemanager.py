@@ -13,7 +13,9 @@ class ResourceManager():
 
     def get_string(self, sid, **kwargs):
         """Get strings and put in placeholders"""
-        return self._all_strings[sid].substitute(kwargs)
+        return self._all_strings[sid].substitute(
+            kwargs, botname=config.bot_name, bothandle=config.bot_handle
+        )
 
     @property
     def _all_strings(self) -> Dict[str, Template]:
