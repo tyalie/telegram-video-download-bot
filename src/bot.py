@@ -107,6 +107,7 @@ class InlineBot:
                 supports_streaming=True, reply_to_message_id=update.message.message_id,
                 filename=info.orig_filename, duration=info.duration_s
             )
+            logging.info("Served video request")
         except TelegramError as err:
             logging.warn("Telegram error", exc_info=err)
             update.message.reply_markdown(
