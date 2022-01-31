@@ -13,7 +13,7 @@ class ResourceManager():
 
     def get_string(self, sid, **kwargs):
         """Get strings and put in placeholders"""
-        return self._all_strings[sid].substitute(mapping=kwargs)
+        return self._all_strings[sid].substitute(kwargs)
 
     @property
     def _all_strings(self) -> Dict[str, Template]:
