@@ -1,7 +1,8 @@
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, Union, List
 from multiprocessing import RLock
-from yt_dlp import YoutubeDL, YoutubeDLError
-from yt_dlp.utils import random_user_agent, DownloadError, UnsupportedError
+from yt_dlp import YoutubeDL
+from functools import reduce
+from yt_dlp.utils import random_user_agent, DownloadError, UnsupportedError, YoutubeDLError
 from yt_dlp.postprocessor import FFmpegVideoRemuxerPP
 from time import time
 from pathlib import Path
@@ -13,7 +14,7 @@ from plugins.tumblr import TumblrIE
 from plugins.youtube_dl_injection import YoutubeDL2
 from settings import config
 from resourcemanager import ResourceManager
-from util import generate_token, check_ffmpeg
+from util import generate_token
 
 
 @dataclass
@@ -22,7 +23,7 @@ class VideoInfo:
     title: str
     ext: str
     duration_s: int
-    uuid: str = field(init=False, default_factory=generate_token)
+    uuid: str
     _creation: float = field(init=False, default_factory=time)
 
     @property
@@ -41,7 +42,13 @@ class MyLogger:
         ...
 
     def warning(self, msg):
-        logging.warning(self._remove_prefix(msg))
+        keywords = ["ffmpeg"]
+
+        should_log = config.debug
+        should_log |= any(map(lambda k: k in msg.lower(), keywords))
+
+        if should_log:
+            logging.warning(self._remove_prefix(msg))
 
     def error(self, msg):
         logging.error(self._remove_prefix(msg))
@@ -53,7 +60,7 @@ class MyLogger:
 class Downloader:
     def __init__(self, resource_manager: ResourceManager):
         self._temporary_dir = tempfile.TemporaryDirectory()
-        self._downloaded_video_cache: Dict[str, VideoInfo] = {}
+        self._downloaded_video_cache: Dict[str, Dict[str, Union[str, List]]] = {}
         self._video_cache_lock = RLock()
 
         logging.debug(f"Using temporary dictionary {self._temporary_dir.name}")
@@ -126,49 +133,94 @@ class Downloader:
 
         return headers
 
+    def _start_download(self, url: str, filename: Path, token: str, ydl: YoutubeDL) -> VideoInfo:
+        # add additional extractor plugins
+        ydl.add_info_extractor(TumblrIE())
+
+        ydl.add_post_processor(FFmpegVideoRemuxerPP(ydl, "mp4"))
+        ydl.add_progress_hook(self._finished_hook)
+        info = self._get_info_with_download(ydl, url)
+        info['ext'] = "mp4"
+
+        filepath = Path(f"{filename}.{info['ext']}")
+
+        file_names = self._get_all_filepaths(info)
+
+        with self._video_cache_lock:
+            self._downloaded_video_cache[token] = file_names
+
+        if file_names["main"] is None or not (filepath := Path(file_names["main"])).is_file():
+            raise YoutubeDLError(f"Downloaded file could not be found ({filepath})")
+
+        vinfo = VideoInfo(
+            filepath=filepath,
+            title=info["title"],
+            ext=info["ext"],
+            duration_s=info.get("duration", None),
+            uuid=token
+        )
+
+        return vinfo
+
     def download(self, url: str, progress_handler: Optional[Callable[[Dict], None]] = None):
         filename = self._get_temp_file_name()
         logging.debug(f"Download: Writing to '{filename}'")
+
+        token = generate_token(8)
 
         with YoutubeDL2(self._get_opts(filename, url)) as ydl:
             if progress_handler is not None:
                 ydl.add_progress_hook(progress_handler)
 
-            # add additional extractor plugins
-            ydl.add_info_extractor(TumblrIE())
-
-            ydl.add_post_processor(FFmpegVideoRemuxerPP(ydl, "mp4"))
-            ydl.add_progress_hook(self._finished_hook)
-            info = self._get_info_with_download(ydl, url)
-            info['ext'] = "mp4"
-
-            filepath = Path(f"{filename}.{info['ext']}")
-            if not filepath.is_file():
-                raise YoutubeDLError(f"Downloaded file could not be found ({filepath})")
-
-            vinfo = VideoInfo(
-                filepath=filepath,
-                title=info["title"],
-                ext=info["ext"],
-                duration_s=info.get("duration", None)
-            )
-
-            with self._video_cache_lock:
-                self._downloaded_video_cache[vinfo.uuid] = vinfo
-            return vinfo
+            try:
+                return self._start_download(url, filename, token, ydl)
+            finally:
+                self._cleanup(token, True)
 
     def release_video(self, uuid: str):
+        self._cleanup(uuid, False)
+
+    def _cleanup(self, token: str, only_tmp: bool):
         with self._video_cache_lock:
-            if (vinfo := self._downloaded_video_cache.get(uuid)) is None:
+            if (files := self._downloaded_video_cache.get(token)) is None:
+                logging.warning(f"Nothing to clean for {token}")
                 return
 
-            logging.debug(f"Download: Releasing {vinfo.filepath} | {vinfo.uuid}")
-            if vinfo.filepath.is_file():
-                vinfo.filepath.unlink()
-            else:
-                logging.warning(f"Download: File {vinfo.filepath} | {vinfo.uuid} doesn't exist")
+            file_set = set(reduce(lambda o, n: o + (n if type(n) is list else [n]), files.values(), []))
+            if only_tmp:
+                file_set -= {files["main"]}
 
-            del self._downloaded_video_cache[uuid]
+            for file in file_set:
+                if (file := Path(file)).is_file():
+                    logging.debug(f"Cleaning {token}: {file}")
+                    file.unlink()
+                else:
+                    logging.warning(f"Cleaning {token}: {file} doesn't exist")
+
+            for key in list(files.keys()):
+                if only_tmp and key == "main":
+                    continue
+                del files[key]
+
+            if len(files) == 0:
+                del self._downloaded_video_cache[token]
+
+    @staticmethod
+    def _get_all_filepaths(info: Dict[str, Any]) -> Dict[str, Union[str, List]]:
+        if (l := len(info["requested_downloads"])) == 0:
+            return
+        elif l > 1:
+            return RuntimeError("More than one requested download")
+
+        download = info["requested_downloads"][0]
+
+        file_dir = {
+            "main": download.get("filepath"),
+            "premux": download.get("_filename"),
+            "formats": list(map(lambda f: f.get("filepath"), download.get("requested_formats", [])))
+        }
+
+        return file_dir
 
     def __del__(self):
         logging.debug("Download: Cleaning up temporary dictionary")
