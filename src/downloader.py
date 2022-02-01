@@ -67,8 +67,7 @@ class Downloader:
 
     def _get_opts(self, filename, url) -> Dict[str, Any]:
         return {
-            # prefer h264, … over vp9 and have video be 480p or smallest 
-            "format_sort": ["+vcodec:avc", "+acodec:m4a", "res:480"],
+            "format_sort": ["res:480"],
             "outtmpl": f"{filename}.%(ext)s",
             "paths": {
                 "home": self._temporary_dir.name
@@ -197,8 +196,6 @@ class Downloader:
                 if file is not None and (file := Path(file)).is_file():
                     logging.debug(f"Cleaning {token}: {file}")
                     file.unlink()
-                else:
-                    logging.warning(f"Cleaning {token}: {file} doesn't exist")
 
             for key in list(files.keys()):
                 if only_tmp and key == "main":
