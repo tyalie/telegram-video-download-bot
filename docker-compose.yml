@@ -1,7 +1,10 @@
 version: "3.3"
 services:
   telegram_video_bot:
-    build: .
+    build: 
+      context: .
+      args:
+        FFMPEG_URL: https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
     restart: always
     container_name: telegram_video_bot
     environment:
