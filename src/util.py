@@ -1,4 +1,5 @@
 from yt_dlp.utils import YoutubeDLError
+import logging
 import base64
 import secrets
 
@@ -19,3 +20,20 @@ def clean_yt_error(error: YoutubeDLError, max_length: int = 90) -> str:
     if len(text) > max_length:
         text = text[:max_length] + "…"
     return text
+
+
+def check_ffmpeg(quiet: bool = False) -> bool:
+    from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor, FFmpegPostProcessorError
+
+    try:
+        FFmpegPostProcessor().check_version()
+        return True
+    except FFmpegPostProcessorError:
+        if not quiet:
+            logging.error(
+                "ffmpeg / ffprobe not found. Please install executable."
+                "Otherwise features like merge will be missing"
+            )
+    return False
+
+
