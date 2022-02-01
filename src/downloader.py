@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, Callable
 from multiprocessing import RLock
-from yt_dlp import YoutubeDL
+from yt_dlp import YoutubeDL, YoutubeDLError
 from yt_dlp.utils import random_user_agent, DownloadError, UnsupportedError
 from yt_dlp.postprocessor import FFmpegVideoRemuxerPP
 from time import time
@@ -13,7 +13,7 @@ from plugins.tumblr import TumblrIE
 from plugins.youtube_dl_injection import YoutubeDL2
 from settings import config
 from resourcemanager import ResourceManager
-from util import generate_token
+from util import generate_token, check_ffmpeg
 
 
 @dataclass
@@ -41,7 +41,7 @@ class MyLogger:
         ...
 
     def warning(self, msg):
-        ...
+        logging.warning(self._remove_prefix(msg))
 
     def error(self, msg):
         logging.error(self._remove_prefix(msg))
@@ -144,7 +144,7 @@ class Downloader:
 
             filepath = Path(f"{filename}.{info['ext']}")
             if not filepath.is_file():
-                raise RuntimeError(f"Downloaded file could not be found ({filepath})")
+                raise YoutubeDLError(f"Downloaded file could not be found ({filepath})")
 
             vinfo = VideoInfo(
                 filepath=filepath,
