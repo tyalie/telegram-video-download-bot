@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Callable, Union, List
+from typing import Dict, Any, Optional, Callable, Union, List, Tuple
 from multiprocessing import RLock
 from yt_dlp import YoutubeDL
 from functools import reduce
@@ -85,10 +85,10 @@ class Downloader:
             "no_color": True,
         }
 
-    def _get_temp_file_name(self) -> str:
-        uuid = generate_token(32)
+    def _get_temp_file_name(self) -> Tuple[str, str]:
+        uuid = generate_token(16)
         path = Path(self._temporary_dir.name) / uuid 
-        return str(path)
+        return str(path), uuid
 
     def _video_filter(self, info_dict, *args, **kwargs):
         results = list(
@@ -163,10 +163,8 @@ class Downloader:
         return vinfo
 
     def download(self, url: str, progress_handler: Optional[Callable[[Dict], None]] = None):
-        filename = self._get_temp_file_name()
+        filename, token = self._get_temp_file_name()
         logging.debug(f"Download: Writing to '{filename}'")
-
-        token = generate_token(8)
 
         with YoutubeDL2(self._get_opts(filename, url)) as ydl:
             if progress_handler is not None:
@@ -180,6 +178,11 @@ class Downloader:
     def release_video(self, uuid: str):
         self._cleanup(uuid, False)
 
+        # check for inconsitencies
+        leftovers = list(Path(self._temporary_dir.name).glob(f"./{uuid}*"))
+        if len(leftovers) != 0:
+            logging.error(f"Even after full cleanup of {uuid} some files remained ({leftovers})")
+
     def _cleanup(self, token: str, only_tmp: bool):
         with self._video_cache_lock:
             if (files := self._downloaded_video_cache.get(token)) is None:
@@ -191,7 +194,7 @@ class Downloader:
                 file_set -= {files["main"]}
 
             for file in file_set:
-                if (file := Path(file)).is_file():
+                if file is not None and (file := Path(file)).is_file():
                     logging.debug(f"Cleaning {token}: {file}")
                     file.unlink()
                 else:
