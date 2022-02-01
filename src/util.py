@@ -5,7 +5,7 @@ import secrets
 
 
 def generate_token(length: int = 8) -> str:
-    return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ASCII")
+    return base64.urlsafe_b64encode(secrets.token_bytes(length)).decode("ASCII")
 
 
 def validate_query(url: str) -> bool:
