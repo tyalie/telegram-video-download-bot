@@ -3,6 +3,7 @@ services:
   telegram_video_bot:
     build: .
     restart: always
+    container_name: telegram_video_bot
     environment:
       - DEV_NULL_CHAT=YOUR_DEV_NULL_CHAT
       - BOT_NAME=Video Bot
