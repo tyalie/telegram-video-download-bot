@@ -17,8 +17,8 @@ from util import clean_yt_error
 class InlineBot:
     def __init__(self, token, devnullchat=-1):
         self._updater = Updater(token=token, use_context=True)
-        self._downloader = Downloader()
         self._resource_man = ResourceManager()
+        self._downloader = Downloader(self._resource_man)
 
         self._inline_query_response_dispatcher = InlineQueryRespondDispatcher(
             self._updater.bot, self._resource_man, self._downloader, devnullchat

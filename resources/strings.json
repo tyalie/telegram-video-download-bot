@@ -6,5 +6,7 @@
   "status_download_progress": "*Download started* - ${progress}%",
   "status_download_finished": "Download finished",
   "error_telegram": "Telegram error occured\n${error}",
-  "error_download": "*Error downloading media*\n```\n${error}\n```"
+  "error_download": "*Error downloading media*\n```\n${error}\n```",
+  "reject_too_long": "Rejected: Video is too long with ${duration}s",
+  "reject_is_live": "Rejected: Video is a live feed"
 }
