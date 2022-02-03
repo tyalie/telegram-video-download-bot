@@ -10,7 +10,7 @@ from typing import Optional
 from yt_dlp.utils import YoutubeDLError
 from dataclasses import dataclass
 
-from resourcemanager import ResourceManager
+from resourcemanager import resource_manager
 from downloader import Downloader
 
 from util import validate_query, clean_yt_error
@@ -25,12 +25,10 @@ class Query:
 
 class InlineQueryRespondDispatcher:
     def __init__(
-        self, bot: Bot, resource_manager: ResourceManager,
-        downloader: Downloader, devnullchat: int
+        self, bot: Bot, downloader: Downloader, devnullchat: int
     ):
         self.devnullchat = devnullchat
         self.bot = bot
-        self.resource_man = resource_manager
         self.downloader = downloader
 
         self._next_query_lock = Lock()
@@ -120,12 +118,12 @@ class InlineQueryResponse:
         except TelegramError as err:
             logging.warn("Error handling inline query", exc_info=err)
             result = InlineQueryResultArticle(
-                0, self.dispatcher.resource_man.get_string("error_inline_telegram_title"),
+                0, resource_manager.get_string("error_inline_telegram_title"),
                 InputTextMessageContent(err.message), description=str(err)
             )
         except YoutubeDLError as err:
             result = InlineQueryResultArticle(
-                0, self.dispatcher.resource_man.get_string("error_inline_download_title"),
+                0, resource_manager.get_string("error_inline_download_title"),
                 InputTextMessageContent(f"Error downloading: {query}"),
                 description=clean_yt_error(err)
             )

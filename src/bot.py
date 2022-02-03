@@ -9,7 +9,7 @@ from telegram.ext import (
 
 from yt_dlp.utils import YoutubeDLError
 from downloader import Downloader 
-from resourcemanager import ResourceManager
+from resourcemanager import resource_manager
 from InlineQueryResponseDispatcher import InlineQueryRespondDispatcher
 from util import clean_yt_error
 
@@ -17,11 +17,10 @@ from util import clean_yt_error
 class InlineBot:
     def __init__(self, token, devnullchat=-1):
         self._updater = Updater(token=token, use_context=True)
-        self._resource_man = ResourceManager()
-        self._downloader = Downloader(self._resource_man)
+        self._downloader = Downloader()
 
         self._inline_query_response_dispatcher = InlineQueryRespondDispatcher(
-            self._updater.bot, self._resource_man, self._downloader, devnullchat
+            self._updater.bot, self._downloader, devnullchat
         )
 
         _start = CommandHandler('start', self.on_start, filters=Filters.chat_type.private)
@@ -50,7 +49,7 @@ class InlineBot:
         self._updater.stop()
 
     def on_start(self, update: Update, context: CallbackContext):
-        update.message.reply_text(self._resource_man.get_string("greeting"))
+        update.message.reply_text(resource_manager.get_string("greeting"))
 
     def get_chat_id(self, update: Update, context: CallbackContext):
         update.message.reply_text(f"{update.message.chat_id}")
@@ -64,14 +63,14 @@ class InlineBot:
             nonlocal last_bucket, counter
 
             if data["status"] == "finished":
-                status_message.edit_text(self._resource_man.get_string("status_download_finished"))
+                status_message.edit_text(resource_manager.get_string("status_download_finished"))
             elif data["status"] == "downloading":
                 progress = data["downloaded_bytes"] / data["total_bytes"] * 100
                
                 # I can't update message to often if it is in group
                 next_bucket = next(filter(lambda v: v <= progress, reversed(buckets)))
                 if (next_bucket != last_bucket and counter < 4) or status_message.chat.type == "private":
-                    text = self._resource_man.get_string(
+                    text = resource_manager.get_string(
                         "status_download_progress", progress=f"{progress:.1f}")
                     if status_message.text != text:
                         status_message.edit_text(text, parse_mode="Markdown")
@@ -86,7 +85,7 @@ class InlineBot:
 
     def on_download(self, update: Update, context: CallbackContext):
         if len(context.args) != 1:
-            update.message.reply_text(self._resource_man.get_string("download_error_arg_one"))
+            update.message.reply_text(resource_manager.get_string("download_error_arg_one"))
             return
 
         status_message = None
@@ -94,7 +93,7 @@ class InlineBot:
 
         try:
             status_message = update.message.reply_text(
-                self._resource_man.get_string("status_download_progress", progress="0"), 
+                resource_manager.get_string("status_download_progress", progress="0"), 
                 parse_mode="Markdown", reply_to_message_id=update.message.message_id
             )
 
@@ -111,14 +110,14 @@ class InlineBot:
         except TelegramError as err:
             logging.warn("Telegram error", exc_info=err)
             update.message.reply_markdown(
-                self._resource_man.get_string("error_telegram", error=err.message),
+                resource_manager.get_string("error_telegram", error=err.message),
                 reply_to_message_id=update.message.message_id
             )
         except YoutubeDLError as err:
             logging.info(f"Download error ({context.args[0]})")
             error_text = escape_markdown(clean_yt_error(err), version=2, entity_type="CODE")
             update.message.reply_markdown_v2(
-                self._resource_man.get_string("error_download", error=error_text),
+                resource_manager.get_string("error_download", error=error_text),
                 reply_to_message_id=update.message.message_id,
                 disable_web_page_preview=True
             )

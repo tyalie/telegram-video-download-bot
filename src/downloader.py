@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from plugins.tumblr import TumblrIE
 from plugins.youtube_dl_injection import YoutubeDL2
 from settings import config
-from resourcemanager import ResourceManager
+from resourcemanager import resource_manager 
 from util import generate_token
 
 
@@ -58,8 +58,7 @@ class MyLogger:
 
 
 class Downloader:
-    def __init__(self, resource_manager: ResourceManager):
-        self._resource_man = resource_manager
+    def __init__(self):
         self._temporary_dir = tempfile.TemporaryDirectory()
         self._downloaded_video_cache: Dict[str, Dict[str, Union[str, List]]] = {}
         self._video_cache_lock = RLock()
@@ -108,13 +107,13 @@ class Downloader:
         duration = info_dict.get("duration", 0)
         if duration is None or duration < config.max_video_length_s:
             return None
-        return self._resource_man.get_string("reject_too_long", duration=duration)
+        return resource_manager.get_string("reject_too_long", duration=duration)
 
     def _filter_is_live(self, info_dict, *args, **kwargs):
         """Filters video whether it's a live stream or not"""
         if not info_dict.get("is_live", False):
             return None
-        return self._resource_man.get_string("reject_is_live")
+        return resource_manager.get_string("reject_is_live")
 
     def _finished_hook(self, info):
         if info["status"] == "finished":

@@ -5,7 +5,7 @@ import json
 
 
 class ResourceManager():
-    def __init__(self, strings_file = None):
+    def __init__(self, strings_file=None):
         if strings_file is None:
             strings_file = config.resource_path / "strings.json"
 
@@ -35,3 +35,6 @@ class ResourceManager():
                 self.__data_buffer = data
         finally:
             return data
+
+
+resource_manager = ResourceManager()
