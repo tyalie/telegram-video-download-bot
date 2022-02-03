@@ -96,9 +96,10 @@ class InlineQueryResponse:
         if not validate_query(query):
             return
 
+        result = None
         try:
             with Downloader() as downloader:
-                info = downloader.download(query)
+                info = downloader.start(query)
                 self.video_cache = self._upload_video(info)
 
             if self.video_cache is not None:
@@ -119,8 +120,9 @@ class InlineQueryResponse:
                 description=clean_yt_error(err)
             )
         finally:
-            self._bot.answerInlineQuery(query_id, [result], cache_time=0)
-            logging.debug(f"Answered to inline query '{query}'")
+            if result is not None:
+                self._bot.answerInlineQuery(query_id, [result], cache_time=0)
+                logging.debug(f"Answered to inline query '{query}'")
 
     def _close_down(self):
         logging.debug("Cleaning up query {self}")
