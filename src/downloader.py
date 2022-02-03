@@ -61,16 +61,21 @@ class MyLogger:
 
 class Downloader:
     def __init__(self, temp_dir: Optional[tempfile.TemporaryDirectory] = None):
+        self._temp_dir: tempfile.TemporaryDirectory = None
+        if temp_dir is not None:
+            self._init_temp_dir(temp_dir)
+
+    def _init_temp_dir(self, temp_dir):
         self._temp_dir = temp_dir
         logging.debug(f"Using temporary dictionary {self._temp_dir.name}")
 
     def __enter__(self):
         if self._temp_dir is None:
-            self._temp_dir = tempfile.TemporaryDirectory()
+            self._init_temp_dir(tempfile.TemporaryDirectory())
         return self
 
-    def __exit__(self):
-        self._temp_dir.close()
+    def __exit__(self, exc, value, tb):
+        self._temp_dir.cleanup()
 
     def _get_opts(self, filename, url: str) -> Dict[str, Any]:
         return {
