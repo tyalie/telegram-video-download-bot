@@ -33,10 +33,9 @@ class InlineBot:
         _chat_id = CommandHandler('get_chat_id', self.get_chat_id)
         self._dispatcher.add_handler(_chat_id)
 
-        self._dispatcher.bot.set_my_commands(
-            [(_start.command[0], "Start conversation with the bot"), 
-             (_download.command[0], "Download the video file from the given URL")]
-        )
+        self._dispatcher.bot.set_my_commands([
+            (_download.command[0], "Download the video file from the given URL")
+        ])
 
         self._dispatcher.add_handler(InlineQueryHandler(self.on_inline, run_async=True))
 
