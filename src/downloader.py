@@ -26,6 +26,10 @@ class VideoInfo:
     uuid: str
     _creation: float = field(init=False, default_factory=time)
 
+    def __post_init__(self):
+        if self.title is None or len(self.title) == 0:
+            self.title = resource_manager.get_string("video_no_title")
+
     @property
     def orig_filename(self) -> str:
         return f"{self.title}.{self.ext}"
