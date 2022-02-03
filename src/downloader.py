@@ -3,6 +3,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import random_user_agent, DownloadError, UnsupportedError, YoutubeDLError
 from yt_dlp.postprocessor import FFmpegVideoRemuxerPP
 from time import time
+from urllib.parse import urljoin, urlparse
 from pathlib import Path
 import tempfile
 import logging
@@ -22,6 +23,7 @@ class VideoInfo:
     ext: str
     duration_s: int
     uuid: str
+    url: str
     _creation: float = field(init=False, default_factory=time)
 
     def __post_init__(self):
@@ -138,7 +140,7 @@ class Downloader:
         headers = {"User-Agent": random_user_agent()}
         url = url.lower()
 
-        if "tiktok" in url:
+        if "tiktok.com" in url:
             # see https://github.com/yt-dlp/yt-dlp/issues/2396
             headers.update({"User-Agent": "facebookexternalhit/1.1"})
 
@@ -162,7 +164,8 @@ class Downloader:
             title=info["title"],
             ext=info["ext"],
             duration_s=info.get("duration", None),
-            uuid=token
+            uuid=token,
+            url=self._get_url(url, info)
         )
 
         return vinfo
@@ -187,3 +190,13 @@ class Downloader:
         download = info["requested_downloads"][0]
 
         return Path(download["filepath"]) if "filepath" in download else None
+
+    @staticmethod
+    def _get_url(url: str, info: Dict[str, Any]) -> str:
+        url = url.lower()
+        if "vm.tiktok.com" in url and "webpage_url" in info:
+            # remove the share tracking from the tiktok video
+            # by extracting the pure URL
+            new_url = info["webpage_url"]
+            return urljoin(new_url, urlparse(new_url).path)
+        return url

@@ -106,7 +106,7 @@ class InlineQueryResponse:
             if self.video_cache is not None:
                 media_id = self.video_cache.video.file_id
                 result = InlineQueryResultCachedVideo(
-                    0, video_file_id=media_id, title=info.title, caption=query
+                    0, video_file_id=media_id, title=info.title, caption=info.url
                 )
         except TelegramError as err:
             logging.warn("Error handling inline query", exc_info=err)
