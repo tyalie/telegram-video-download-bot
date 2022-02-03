@@ -59,6 +59,7 @@ class MyLogger:
 
 class Downloader:
     def __init__(self, resource_manager: ResourceManager):
+        self._resource_man = resource_manager
         self._temporary_dir = tempfile.TemporaryDirectory()
         self._downloaded_video_cache: Dict[str, Dict[str, Union[str, List]]] = {}
         self._video_cache_lock = RLock()
