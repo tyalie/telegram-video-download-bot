@@ -4,6 +4,7 @@ from telegram import (
     Bot, InlineQuery, InlineQueryResultCachedVideo, TelegramError,
     InlineQueryResultArticle, InputTextMessageContent, Message
 )
+from telegram.error import NetworkError
 import logging
 import signal
 from typing import Optional
@@ -84,7 +85,7 @@ class InlineQueryResponse:
         except TypeError as err:
             if str(err) != "handler() has 0 arguments but 2 where given":
                 raise err
-        except StopProcessException:
+        except (StopProcessException, NetworkError):
             ...
         finally:
             self._close_down()
