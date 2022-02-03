@@ -1,7 +1,5 @@
-from typing import Dict, Any, Optional, Callable, Union, List, Tuple
-from multiprocessing import RLock
+from typing import Dict, Any, Optional, Callable, Tuple
 from yt_dlp import YoutubeDL
-from functools import reduce
 from yt_dlp.utils import random_user_agent, DownloadError, UnsupportedError, YoutubeDLError
 from yt_dlp.postprocessor import FFmpegVideoRemuxerPP
 from time import time
@@ -62,19 +60,24 @@ class MyLogger:
 
 
 class Downloader:
-    def __init__(self):
-        self._temporary_dir = tempfile.TemporaryDirectory()
-        self._downloaded_video_cache: Dict[str, Dict[str, Union[str, List]]] = {}
-        self._video_cache_lock = RLock()
+    def __init__(self, temp_dir: Optional[tempfile.TemporaryDirectory] = None):
+        self._temp_dir = temp_dir
+        logging.debug(f"Using temporary dictionary {self._temp_dir.name}")
 
-        logging.debug(f"Using temporary dictionary {self._temporary_dir.name}")
+    def __enter__(self):
+        if self._temp_dir is None:
+            self._temp_dir = tempfile.TemporaryDirectory()
+        return self
 
-    def _get_opts(self, filename, url) -> Dict[str, Any]:
+    def __exit__(self):
+        self._temp_dir.close()
+
+    def _get_opts(self, filename, url: str) -> Dict[str, Any]:
         return {
             "format_sort": ["res:480"],
             "outtmpl": f"{filename}.%(ext)s",
             "paths": {
-                "home": self._temporary_dir.name
+                "home": self._temp_dir.name
             },
             "match_filter": self._video_filter,
             "noplaylist": True,
@@ -90,12 +93,11 @@ class Downloader:
 
     def _get_temp_file_name(self) -> Tuple[str, str]:
         uuid = generate_token(16)
-        path = Path(self._temporary_dir.name) / uuid 
-        return str(path), uuid
+        return str(Path(self._temp_dir.name) / uuid), uuid
 
     def _video_filter(self, info_dict, *args, **kwargs):
         results = list(
-            filter(lambda v: v is not None, 
+            filter(lambda v: v is not None,
                    map(lambda f: f(info_dict), [
                        self._filter_is_live,
                        self._filter_length
@@ -129,6 +131,7 @@ class Downloader:
 
     def _get_custom_headers_from_url(self, url: str) -> Dict:
         headers = {"User-Agent": random_user_agent()}
+        url = url.lower()
 
         if "tiktok" in url:
             # see https://github.com/yt-dlp/yt-dlp/issues/2396
@@ -145,14 +148,8 @@ class Downloader:
         info = self._get_info_with_download(ydl, url)
         info['ext'] = "mp4"
 
-        filepath = Path(f"{filename}.{info['ext']}")
-
-        file_names = self._get_all_filepaths(info)
-
-        with self._video_cache_lock:
-            self._downloaded_video_cache[token] = file_names
-
-        if file_names["main"] is None or not (filepath := Path(file_names["main"])).is_file():
+        filepath = self._get_main_filepath(info)
+        if filepath is None or not filepath.is_file():
             raise YoutubeDLError(f"Downloaded file could not be found ({filepath})")
 
         vinfo = VideoInfo(
@@ -165,7 +162,7 @@ class Downloader:
 
         return vinfo
 
-    def download(self, url: str, progress_handler: Optional[Callable[[Dict], None]] = None):
+    def start(self, url: str, progress_handler: Optional[Callable[[Dict], None]] = None) -> VideoInfo:
         filename, token = self._get_temp_file_name()
         logging.debug(f"Download: Writing to '{filename}'")
 
@@ -173,44 +170,10 @@ class Downloader:
             if progress_handler is not None:
                 ydl.add_progress_hook(progress_handler)
 
-            try:
-                return self._start_download(url, filename, token, ydl)
-            finally:
-                self._cleanup(token, True)
-
-    def release_video(self, uuid: str):
-        self._cleanup(uuid, False)
-
-        # check for inconsitencies
-        leftovers = list(Path(self._temporary_dir.name).glob(f"./{uuid}*"))
-        if len(leftovers) != 0:
-            logging.error(f"Even after full cleanup of {uuid} some files remained ({leftovers})")
-
-    def _cleanup(self, token: str, only_tmp: bool):
-        with self._video_cache_lock:
-            if (files := self._downloaded_video_cache.get(token)) is None:
-                logging.warning(f"Nothing to clean for {token}")
-                return
-
-            file_set = set(reduce(lambda o, n: o + (n if type(n) is list else [n]), files.values(), []))
-            if only_tmp:
-                file_set -= {files["main"]}
-
-            for file in file_set:
-                if file is not None and (file := Path(file)).is_file():
-                    logging.debug(f"Cleaning {token}: {file}")
-                    file.unlink()
-
-            for key in list(files.keys()):
-                if only_tmp and key == "main":
-                    continue
-                del files[key]
-
-            if len(files) == 0:
-                del self._downloaded_video_cache[token]
+            return self._start_download(url, filename, token, ydl)
 
     @staticmethod
-    def _get_all_filepaths(info: Dict[str, Any]) -> Dict[str, Union[str, List]]:
+    def _get_main_filepath(info: Dict[str, Any]) -> Optional[Path]:
         if (l := len(info["requested_downloads"])) == 0:
             return
         elif l > 1:
@@ -218,14 +181,4 @@ class Downloader:
 
         download = info["requested_downloads"][0]
 
-        file_dir = {
-            "main": download.get("filepath"),
-            "premux": download.get("_filename"),
-            "formats": list(map(lambda f: f.get("filepath"), download.get("requested_formats", [])))
-        }
-
-        return file_dir
-
-    def __del__(self):
-        logging.debug("Download: Cleaning up temporary dictionary")
-        self._temporary_dir.cleanup()
+        return Path(download["filepath"]) if "filepath" in download else None

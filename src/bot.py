@@ -1,6 +1,7 @@
 import logging
 from typing import Callable, Dict
-from telegram import Update, TelegramError, Message, BotCommand
+from telegram import Update, TelegramError, Message
+import tempfile
 from telegram.utils.helpers import escape_markdown
 from telegram.ext import (
     Updater, Dispatcher, CallbackContext, CommandHandler, 
@@ -17,10 +18,9 @@ from util import clean_yt_error
 class InlineBot:
     def __init__(self, token, devnullchat=-1):
         self._updater = Updater(token=token, use_context=True)
-        self._downloader = Downloader()
 
         self._inline_query_response_dispatcher = InlineQueryRespondDispatcher(
-            self._updater.bot, self._downloader, devnullchat
+            self._updater.bot, devnullchat
         )
 
         _start = CommandHandler('start', self.on_start, filters=Filters.chat_type.private)
@@ -89,7 +89,6 @@ class InlineBot:
             return
 
         status_message = None
-        info = None
 
         try:
             status_message = update.message.reply_text(
@@ -97,16 +96,17 @@ class InlineBot:
                 parse_mode="Markdown", reply_to_message_id=update.message.message_id
             )
 
-            info = self._downloader.download(
-                context.args[0], self._build_progress_handler(status_message)
-            )
+            with Downloader() as downloader:
+                info = downloader.start(
+                    context.args[0], self._build_progress_handler(status_message)
+                )
 
-            logging.debug(f"Bot: Uploading file '{info.orig_filename}'")
-            update.message.reply_video(
-                open(info.filepath, "rb"),
-                supports_streaming=True, reply_to_message_id=update.message.message_id,
-                filename=info.orig_filename, duration=info.duration_s
-            )
+                logging.debug(f"Bot: Uploading file '{info.orig_filename}'")
+                update.message.reply_video(
+                    open(info.filepath, "rb"),
+                    supports_streaming=True, reply_to_message_id=update.message.message_id,
+                    filename=info.orig_filename, duration=info.duration_s
+                )
         except TelegramError as err:
             logging.warn("Telegram error", exc_info=err)
             update.message.reply_markdown(
@@ -124,8 +124,6 @@ class InlineBot:
         finally:
             if status_message is not None:
                 status_message.delete()
-            if info is not None:
-                self._downloader.release_video(info.uuid)
 
     def on_inline(self, update: Update, context: CallbackContext):
         query = update.inline_query.query

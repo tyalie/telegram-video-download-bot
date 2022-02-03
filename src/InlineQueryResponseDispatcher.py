@@ -1,7 +1,7 @@
 from threading import Thread, Lock
-from multiprocessing import Process, Event
+from multiprocessing import Process
 from telegram import (
-    Bot, InlineQuery, InlineQueryResultCachedVideo, TelegramError, 
+    Bot, InlineQuery, InlineQueryResultCachedVideo, TelegramError,
     InlineQueryResultArticle, InputTextMessageContent, Message
 )
 import logging
@@ -11,25 +11,22 @@ from yt_dlp.utils import YoutubeDLError
 from dataclasses import dataclass
 
 from resourcemanager import resource_manager
-from downloader import Downloader
 
 from util import validate_query, clean_yt_error
-from downloader import VideoInfo
+from downloader import VideoInfo, Downloader
 
 
 @dataclass
 class Query:
-    event: Event
-    process: Optional[Process]
+    process: Optional[Process] = None
 
 
 class InlineQueryRespondDispatcher:
     def __init__(
-        self, bot: Bot, downloader: Downloader, devnullchat: int
+        self, bot: Bot, devnullchat: int
     ):
         self.devnullchat = devnullchat
         self.bot = bot
-        self.downloader = downloader
 
         self._next_query_lock = Lock()
         self._next_query_arrived_events = {}
@@ -40,21 +37,18 @@ class InlineQueryRespondDispatcher:
         with self._next_query_lock:
             try:
                 query = self._next_query_arrived_events[inline_query.from_user.id]
-                query.event.set()
-                # needing to terminate process as there is no trivial 
+                # needing to terminate process as there is no trivial
                 # way to stop YoutubeDL during the download
                 if query.process is not None:
                     query.process.terminate()
             except KeyError:
                 ...
             finally:
-                new_query = Query(Event(), None)
+                new_query = Query()
                 self._next_query_arrived_events[inline_query.from_user.id] = new_query
 
-        responder = InlineQueryResponse(inline_query, new_query.event, self)
-        process = Process(
-            target=responder.start_process,
-        )
+        responder = InlineQueryResponse(inline_query, self.bot, self.devnullchat)
+        process = Process(target=responder.start_process)
         self._next_query_arrived_events[inline_query.from_user.id].process = process
         process.start()
         Thread(target=self.joinProcess, args=[process, inline_query.query]).start()
@@ -71,14 +65,12 @@ class StopProcessException(Exception):
 
 class InlineQueryResponse:
     def __init__(
-        self, inline_query: InlineQuery, new_arrived_event: Event, 
-        dispatcher: InlineQueryRespondDispatcher
+        self, inline_query: InlineQuery, bot: Bot, devnullchat: int
     ):
         self.inline_query = inline_query
-        self.next_arrived_event = new_arrived_event
-        self.dispatcher = dispatcher
+        self._bot = bot
+        self._devnullchat = devnullchat
 
-        self.info = None
         self.video_cache = None
 
     def _handle_sigterm(self, signum, frame):
@@ -105,15 +97,14 @@ class InlineQueryResponse:
             return
 
         try:
-            if not self.next_arrived_event.is_set():
-                self.info = self.dispatcher.downloader.download(query)
-            if not self.next_arrived_event.is_set():
-                self.video_cache = self._upload_video(self.info)
+            with Downloader() as downloader:
+                info = downloader.download(query)
+                self.video_cache = self._upload_video(info)
 
             if self.video_cache is not None:
                 media_id = self.video_cache.video.file_id
                 result = InlineQueryResultCachedVideo(
-                    0, video_file_id=media_id, title=self.info.title, caption=query
+                    0, video_file_id=media_id, title=info.title, caption=query
                 )
         except TelegramError as err:
             logging.warn("Error handling inline query", exc_info=err)
@@ -128,27 +119,22 @@ class InlineQueryResponse:
                 description=clean_yt_error(err)
             )
         finally:
-            if not self.next_arrived_event.is_set():
-                self.dispatcher.bot.answerInlineQuery(query_id, [result], cache_time=0)
-                logging.debug(f"Answered to inline query '{query}'")
+            self._bot.answerInlineQuery(query_id, [result], cache_time=0)
+            logging.debug(f"Answered to inline query '{query}'")
 
     def _close_down(self):
         logging.debug("Cleaning up query {self}")
-        if self.info is not None:
-            self.dispatcher.downloader.release_video(self.info.uuid)
-            self.info = None
         if self.video_cache is not None:
             self.video_cache.delete()
             self.video_cache = None
 
     def _upload_video(self, info: VideoInfo) -> Message:
         try:
-            v_msg = self.dispatcher.bot.send_video(
-                self.dispatcher.devnullchat, open(info.filepath, "rb"), 
+            v_msg = self._bot.send_video(
+                self._devnullchat, open(info.filepath, "rb"),
                 filename=info.orig_filename
             )
             logging.debug(f"Video {info.orig_filename} uploaded successfully")
             return v_msg
         except TelegramError as err:
             logging.warn(f"Telegram Error occured: {err}")
-
