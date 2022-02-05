@@ -65,12 +65,15 @@ class InlineBot:
             if data["status"] == "finished":
                 text = resource_manager.get_string("status_download_finished")
             elif data["status"] == "downloading":
-                progress = data["downloaded_bytes"] / data["total_bytes"] * 100
+                if "total_bytes" in data and "downloaded_bytes" in data:
+                    progress = data["downloaded_bytes"] / data["total_bytes"] * 100
 
-                # I can't update message to often if it is in group
-                if status_message.chat.type == "private":
-                    text = resource_manager.get_string(
-                        "status_download_progress", progress=f"{progress:.1f}")
+                    # I can't update message to often if it is in group
+                    if status_message.chat.type == "private":
+                        text = resource_manager.get_string(
+                            "status_download_progress", progress=f"{progress:.1f}")
+                else:
+                    text = resource_manager.get_string("status_download_progress", progress='?')
 
             else:
                 text = escape_markdown(f"Unknown status - {data['status']}")
