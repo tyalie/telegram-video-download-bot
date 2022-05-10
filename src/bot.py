@@ -1,11 +1,11 @@
 import logging
 from typing import Callable, Dict
-from telegram import Update, TelegramError, Message
+from telegram import Update, TelegramError, Message, MessageEntity
 import tempfile
 from telegram.utils.helpers import escape_markdown
 from telegram.ext import (
     Updater, Dispatcher, CallbackContext, CommandHandler, 
-    Filters, InlineQueryHandler
+    Filters, InlineQueryHandler, MessageHandler
 )
 
 from yt_dlp.utils import YoutubeDLError
@@ -31,6 +31,15 @@ class InlineBot:
 
         _chat_id = CommandHandler('get_chat_id', self.get_chat_id)
         self._dispatcher.add_handler(_chat_id)
+
+        _forwarded_url = MessageHandler(
+            (
+                Filters.forwarded & Filters.chat_type.private
+                & Filters.text & Filters.entity(MessageEntity.URL)
+            ), 
+            self.on_download, run_async=True
+        )
+        self._dispatcher.add_handler(_forwarded_url)
 
         self._dispatcher.bot.set_my_commands([
             (_download.command[0], "Download the video file from the given URL")
@@ -87,21 +96,35 @@ class InlineBot:
         return handler
 
     def on_download(self, update: Update, context: CallbackContext):
-        if len(context.args) != 1:
+        url = None
+        status_message = None
+
+        if not context.args or len(context.args) != 1:
+            msg = update.effective_message
+            if msg and msg.forward_from and msg.text and msg.entities:
+                urls = [
+                    msg.text[e.offset:e.offset + e.length] 
+                    for e in msg.entities if e.type == "url"
+                ]
+
+                if len(urls) == 1:
+                    url = urls[0]
+        else:
+            url = context.args[0]
+
+        if url is None:
             update.message.reply_text(resource_manager.get_string("download_error_arg_one"))
             return
 
-        status_message = None
-
         try:
             status_message = update.message.reply_text(
-                resource_manager.get_string("status_download_progress", progress="0"), 
+                resource_manager.get_string("status_download_progress", progress="0"),
                 parse_mode="Markdown", reply_to_message_id=update.message.message_id
             )
 
             with Downloader() as downloader:
                 info = downloader.start(
-                    context.args[0], self._build_progress_handler(status_message)
+                    url, self._build_progress_handler(status_message)
                 )
 
                 logging.debug(f"Bot: Uploading file '{info.orig_filename}'")
@@ -117,7 +140,7 @@ class InlineBot:
                 reply_to_message_id=update.message.message_id
             )
         except YoutubeDLError as err:
-            logging.info(f"Download error ({context.args[0]})")
+            logging.info(f"Download error ({url})")
             error_text = escape_markdown(clean_yt_error(err), version=2, entity_type="CODE")
             update.message.reply_markdown_v2(
                 resource_manager.get_string("error_download", error=error_text),
