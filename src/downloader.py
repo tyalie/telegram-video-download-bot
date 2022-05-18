@@ -142,7 +142,9 @@ class Downloader:
 
         if "tiktok.com" in url:
             # see https://github.com/yt-dlp/yt-dlp/issues/2396
-            headers.update({"User-Agent": "facebookexternalhit/1.1"})
+            headers.update({
+                "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:96.0) Gecko/20100101 Firefox/96.0"
+            })
 
         return headers
 
