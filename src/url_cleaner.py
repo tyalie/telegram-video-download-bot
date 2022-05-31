@@ -12,7 +12,7 @@ def get_cleaned_url(url: str, info: Dict[str, Any]) -> str:
         return urljoin(new_url, urlparse(new_url).path)
     else:
         p = urlparse(url)
-        if any(map(lambda s: s in p.netloc.lower(), ["instagram", "twitter"])):
+        if any(map(lambda s: s in p.netloc.lower(), ["instagram", "twitter", "tiktok"])):
             return urljoin(url, p.path)
 
     return url
