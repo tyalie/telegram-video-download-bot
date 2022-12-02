@@ -1,4 +1,4 @@
-python-telegram-bot==13.11
+python-telegram-bot==13.14
 yt-dlp==2022.11.11
 pydantic[dotenv]==1.9.0
 beautifulsoup4>=4.9.3
