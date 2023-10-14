@@ -1,5 +1,5 @@
 from typing import Any, Dict
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlsplit, urlencode, parse_qs, urlunsplit
 
 
 def get_cleaned_url(url: str, info: Dict[str, Any]) -> str:
@@ -9,10 +9,18 @@ def get_cleaned_url(url: str, info: Dict[str, Any]) -> str:
         # remove the share tracking from the tiktok video
         # by extracting the pure URL
         new_url = info["webpage_url"]
-        return urljoin(new_url, urlparse(new_url).path)
+        return urljoin(new_url, urlsplit(new_url).path)
     else:
-        p = urlparse(url)
+        p = urlsplit(url)
         if any(map(lambda s: s in p.netloc.lower(), ["instagram", "twitter", "tiktok"])):
             return urljoin(url, p.path)
+        elif any(map(lambda s: s in p.netloc.lower(), ["youtube", "youtu.be"])):
+            # remove share identifier from url
+
+            querys = parse_qs(p.query)
+            if "si" in querys:
+                del querys["si"]
+            p = p._replace(query=urlencode(querys, doseq=True))
+            return urlunsplit(p)
 
     return url
